@@ -51,62 +51,86 @@
 
 #define SUMD_SYNCBYTE 0xA8
 #define SUMD_MAX_CHANNEL 32
-#define SUMD_BUFFSIZE (SUMD_MAX_CHANNEL * 2 + 5) // 6 channels + 5 = 17 bytes for 6 channels
-
+#define SUMD_BYTES_PER_CHANNEL 2
+#define SUMD_BUFFSIZE (SUMD_MAX_CHANNEL * SUMD_BYTES_PER_CHANNEL) // 2 bytes per channel
 #define SUMD_BAUDRATE 115200
+
+#define SUMDV1_FRAME_STATE_OK 0x01
+#define SUMDV3_FRAME_STATE_OK 0x03
+#define SUMD_FRAME_STATE_FAILSAFE 0x81
 
 static bool sumdFrameDone = false;
 static uint16_t sumdChannels[MAX_SUPPORTED_RC_CHANNEL_COUNT];
+static uint16_t sumdCrcReceived;
+static uint8_t sumdStatus;
 static uint16_t crc;
 
 static uint8_t sumd[SUMD_BUFFSIZE] = { 0, };
 static uint8_t sumdChannelCount;
+
+typedef enum { SUMD_UNSYNCED, SUMD_READING_STATE, SUMD_READING_LENGTH, SUMD_READING_DATA, SUMD_READING_CRC_HIGH, SUMD_READING_CRC_LOW} state_codes_t;
+state_codes_t recvState = SUMD_UNSYNCED;
 
 // Receive ISR callback
 static void sumdDataReceive(uint16_t c, void *data)
 {
     UNUSED(data);
 
-    uint32_t sumdTime;
-    static uint32_t sumdTimeLast;
-    static uint8_t sumdIndex;
+    static uint8_t channelBytesLength = 0;
+    static uint8_t channelBytesRead = 0;
+    static uint32_t sumdTimeLast = 0;
+    state_codes_t nextRecvState = recvState;
+    uint32_t sumdTime = micros();
 
-    sumdTime = micros();
-    if ((sumdTime - sumdTimeLast) > 4000)
-        sumdIndex = 0;
+    if ((sumdTime - sumdTimeLast) > 4000) {
+        nextRecvState = SUMD_UNSYNCED;
+        recvState = SUMD_UNSYNCED;
+    }
     sumdTimeLast = sumdTime;
 
-    if (sumdIndex == 0) {
-        if (c != SUMD_SYNCBYTE)
-            return;
-        else
-        {
-            sumdFrameDone = false; // lazy main loop didnt fetch the stuff
-            crc = 0;
-        }
-    }
-    if (sumdIndex == 2)
-        sumdChannelCount = (uint8_t)c;
-    if (sumdIndex < SUMD_BUFFSIZE)
-        sumd[sumdIndex] = (uint8_t)c;
-    sumdIndex++;
-    if (sumdIndex < sumdChannelCount * 2 + 4)
-        crc = crc16_ccitt(crc, (uint8_t)c);
-    else
-        if (sumdIndex == sumdChannelCount * 2 + 5) {
-            sumdIndex = 0;
+    switch(recvState) {
+        case SUMD_UNSYNCED:
+            if (c == SUMD_SYNCBYTE) {
+                nextRecvState = SUMD_READING_STATE;
+                crc = crc16_ccitt(crc, (uint8_t)c);
+            }
+            break;
+        case SUMD_READING_STATE:
+             nextRecvState = SUMD_READING_LENGTH;
+             sumdStatus = (uint8_t)c;
+             crc = crc16_ccitt(crc, (uint8_t)c);
+             break;
+        case SUMD_READING_LENGTH:
+             nextRecvState = SUMD_READING_DATA;
+             channelBytesLength = SUMD_BYTES_PER_CHANNEL * (uint8_t)c;
+             channelBytesRead = 0;
+             crc = crc16_ccitt(crc, (uint8_t)c);
+             break;
+        case SUMD_READING_DATA:
+            crc = crc16_ccitt(crc, (uint8_t)c);
+            if (channelBytesRead < SUMD_BUFFSIZE) {
+                sumd[channelBytesRead] = (uint8_t)c;
+            }
+            channelBytesRead++;
+            if (channelBytesRead >= channelBytesLength) {
+                nextRecvState = SUMD_READING_CRC_HIGH;
+            }
+            break;
+        case SUMD_READING_CRC_HIGH:
+            nextRecvState = SUMD_READING_CRC_LOW;
+            sumdCrcReceived = c << 8;
+            break;
+        case SUMD_READING_CRC_LOW:
+            nextRecvState = SUMD_UNSYNCED;
+            sumdCrcReceived |= (uint8_t)c;
             sumdFrameDone = true;
-        }
+            break;
+        default:
+            nextRecvState = SUMD_UNSYNCED;
+    }
+
+    recvState = nextRecvState;
 }
-
-#define SUMD_OFFSET_CHANNEL_1_HIGH 3
-#define SUMD_OFFSET_CHANNEL_1_LOW 4
-#define SUMD_BYTES_PER_CHANNEL 2
-
-
-#define SUMDV1_FRAME_STATE_OK 0x01
-#define SUMDV3_FRAME_STATE_OK 0x03
-#define SUMD_FRAME_STATE_FAILSAFE 0x81
 
 static uint8_t sumdFrameStatus(rxRuntimeConfig_t *rxRuntimeConfig)
 {
@@ -121,11 +145,11 @@ static uint8_t sumdFrameStatus(rxRuntimeConfig_t *rxRuntimeConfig)
     sumdFrameDone = false;
 
     // verify CRC
-    if (crc != ((sumd[SUMD_BYTES_PER_CHANNEL * sumdChannelCount + SUMD_OFFSET_CHANNEL_1_HIGH] << 8) |
-            (sumd[SUMD_BYTES_PER_CHANNEL * sumdChannelCount + SUMD_OFFSET_CHANNEL_1_LOW])))
+    if (crc != sumdCrcReceived) {
         return frameStatus;
+    }
 
-    switch (sumd[1]) {
+    switch (sumdStatus) {
         case SUMD_FRAME_STATE_FAILSAFE:
             frameStatus = RX_FRAME_COMPLETE | RX_FRAME_FAILSAFE;
             break;
@@ -141,8 +165,7 @@ static uint8_t sumdFrameStatus(rxRuntimeConfig_t *rxRuntimeConfig)
 
     for (unsigned channelIndex = 0; channelIndex < channelsToProcess; channelIndex++) {
         sumdChannels[channelIndex] = (
-            (sumd[SUMD_BYTES_PER_CHANNEL * channelIndex + SUMD_OFFSET_CHANNEL_1_HIGH] << 8) |
-            sumd[SUMD_BYTES_PER_CHANNEL * channelIndex + SUMD_OFFSET_CHANNEL_1_LOW]
+                (sumd[SUMD_BYTES_PER_CHANNEL * channelIndex] << 8) | sumd[SUMD_BYTES_PER_CHANNEL * channelIndex + 1]
         );
     }
     return frameStatus;
