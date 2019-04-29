@@ -164,8 +164,8 @@ ledstrip_unittest_SRC := \
 
 ledstrip_unittest_DEFINES := \
         USE_LED_STRIP=
-       
-       
+
+
 maths_unittest_SRC := \
 		$(USER_DIR)/common/maths.c
 
@@ -212,6 +212,10 @@ rx_crsf_unittest_SRC := \
 rx_ibus_unittest_SRC := \
 		$(USER_DIR)/rx/ibus.c
 
+rx_sumd_unittest_SRC := \
+		$(USER_DIR)/common/crc.c \
+		$(USER_DIR)/common/streambuf.c \
+		$(USER_DIR)/rx/sumd.c
 
 rx_ranges_unittest_SRC := \
 		$(USER_DIR)/common/bitarray.c \

@@ -76,7 +76,6 @@ static void sumdDataReceive(uint16_t c, void *data)
 {
     UNUSED(data);
 
-    static uint8_t channelBytesLength = 0;
     static uint8_t channelBytesRead = 0;
     static uint32_t sumdTimeLast = 0;
     state_codes_t nextRecvState = recvState;
@@ -102,9 +101,9 @@ static void sumdDataReceive(uint16_t c, void *data)
              break;
         case SUMD_READING_LENGTH:
              nextRecvState = SUMD_READING_DATA;
-             channelBytesLength = SUMD_BYTES_PER_CHANNEL * (uint8_t)c;
+             sumdChannelCount = (uint8_t)c;
              channelBytesRead = 0;
-             crc = crc16_ccitt(crc, (uint8_t)c);
+             crc = crc16_ccitt(crc, sumdChannelCount);
              break;
         case SUMD_READING_DATA:
             crc = crc16_ccitt(crc, (uint8_t)c);
@@ -112,7 +111,7 @@ static void sumdDataReceive(uint16_t c, void *data)
                 sumd[channelBytesRead] = (uint8_t)c;
             }
             channelBytesRead++;
-            if (channelBytesRead >= channelBytesLength) {
+            if (channelBytesRead >= SUMD_BYTES_PER_CHANNEL * sumdChannelCount) {
                 nextRecvState = SUMD_READING_CRC_HIGH;
             }
             break;
