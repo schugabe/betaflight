@@ -197,29 +197,42 @@ protected:
         microseconds_stub_value += 5000;
         EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
     }
+
+    virtual void sendValidPacket()
+    {
+      uint8_t packet[] = {0xA8, 0x01, 20,
+                          0x1c, 0x20, 0x22, 0x60, 0x2e, 0xe0, 0x3b, 0x60, 0x41, 0xa0,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x06, 0x3f}; //checksum
+
+      for (size_t i=0; i < sizeof(packet); i++) {
+          EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+          stub_serialRxCallback(packet[i], NULL);
+      }
+
+      //report frame complete once
+      EXPECT_EQ(RX_FRAME_COMPLETE, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+      EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+
+      ASSERT_EQ(900, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 0));
+      ASSERT_EQ(1100, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 1));
+      ASSERT_EQ(1500, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 2));
+      ASSERT_EQ(1900, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 3));
+      ASSERT_EQ(2100, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 4));
+    }
+
 };
+
 
 TEST_F(SumdRxProtocollUnitTest, Test_OnePacketReceived)
 {
-    uint8_t packet[] = {0xA8, 0x01, 20,
-                        0x1c, 0x20, 0x22, 0x60, 0x2e, 0xe0, 0x3b, 0x60, 0x41, 0xa0,
-                        0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
-                        0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
-                        0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
-                        0x06, 0x3f}; //checksum
+    sendValidPacket();
+}
 
-    for (size_t i=0; i < sizeof(packet); i++) {
-        EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
-        stub_serialRxCallback(packet[i], NULL);
-    }
-
-    //report frame complete once
-    EXPECT_EQ(RX_FRAME_COMPLETE, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
-    EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
-
-    ASSERT_EQ(900, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 0));
-    ASSERT_EQ(1100, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 1));
-    ASSERT_EQ(1500, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 2));
-    ASSERT_EQ(1900, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 3));
-    ASSERT_EQ(2100, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 4));
+TEST_F(SumdRxProtocollUnitTest, Test_MultiplePacketsReceived)
+{
+    sendValidPacket();
+    sendValidPacket();
 }
