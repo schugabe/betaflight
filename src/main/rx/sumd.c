@@ -93,7 +93,6 @@ static void sumdDataReceive(uint16_t c, void *data)
             if (c == SUMD_SYNCBYTE) {
                 nextRecvState = SUMD_READING_STATE;
                 crc = crc16_ccitt(0, (uint8_t)c);
-                printf("synced\n");
             }
             break;
         case SUMD_READING_STATE:
@@ -147,7 +146,6 @@ static uint8_t sumdFrameStatus(rxRuntimeConfig_t *rxRuntimeConfig)
 
     // verify CRC
     if (crc != sumdCrcReceived) {
-        printf("crc invalid\n");
         return frameStatus;
     }
 
