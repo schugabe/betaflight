@@ -198,6 +198,19 @@ protected:
         EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
     }
 
+    virtual void checkValidChannels()
+    {
+      //report frame complete once
+      EXPECT_EQ(RX_FRAME_COMPLETE, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+      EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+
+      ASSERT_EQ(900, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 0));
+      ASSERT_EQ(1100, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 1));
+      ASSERT_EQ(1500, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 2));
+      ASSERT_EQ(1900, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 3));
+      ASSERT_EQ(2100, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 4));
+    }
+
     virtual void sendValidPacket()
     {
       uint8_t packet[] = {0xA8, 0x01, 20,
@@ -211,9 +224,79 @@ protected:
           EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
           stub_serialRxCallback(packet[i], NULL);
       }
+      checkValidChannels();
+    }
 
-      //report frame complete once
-      EXPECT_EQ(RX_FRAME_COMPLETE, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+    virtual void sendValidLongPacket()
+    {
+      uint8_t packet[] = {0xA8, 0x01, 32,
+                          0x1c, 0x20, 0x22, 0x60, 0x2e, 0xe0, 0x3b, 0x60, 0x41, 0xa0,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20,
+                          0xeb, 0x61}; //checksum
+
+      for (size_t i=0; i < sizeof(packet); i++) {
+          EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+          stub_serialRxCallback(packet[i], NULL);
+      }
+      checkValidChannels();
+    }
+
+    virtual void sendValidShortPacket()
+    {
+      uint8_t packet[] = {0xA8, 0x01, 16,
+                          0x1c, 0x20, 0x22, 0x60, 0x2e, 0xe0, 0x3b, 0x60, 0x41, 0xa0,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20,
+                          0x37, 0x24}; //checksum
+
+      for (size_t i=0; i < sizeof(packet); i++) {
+          EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+          stub_serialRxCallback(packet[i], NULL);
+      }
+
+      checkValidChannels();
+    }
+
+    virtual void sendValidFsPacket()
+    {
+
+      uint8_t packet[] = {0xA8, 0x81, 0x08,
+        0x2E, 0xE0, 0x2E, 0xE0, 0x2E, 0xE0, 0x2E, 0xE0, 0x2E, 0xE0, 0x2E, 0xE0, 0x2E, 0xE0, 0x2E, 0xE0,
+        0xF9, 0x0F};
+
+      for (size_t i=0; i < sizeof(packet); i++) {
+          EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+          stub_serialRxCallback(packet[i], NULL);
+      }
+
+      EXPECT_EQ(RX_FRAME_COMPLETE | RX_FRAME_FAILSAFE, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+      EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+
+      for  (size_t i=0; i < 8; i++) {
+        ASSERT_EQ(1500, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, i));
+      }
+    }
+
+    virtual void sendInvalidPacket()
+    {
+      uint8_t packet[] = {0xA8, 0x01, 20,
+                          0x1c, 0x21, 0x22, 0x60, 0x2e, 0xe0, 0x3b, 0x60, 0x41, 0xa0,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20, 0x1c, 0x20,
+                          0x06, 0x3f}; //checksum
+
+      for (size_t i=0; i < sizeof(packet); i++) {
+          EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+          stub_serialRxCallback(packet[i], NULL);
+      }
+
       EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
 
       ASSERT_EQ(900, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 0));
@@ -223,6 +306,20 @@ protected:
       ASSERT_EQ(2100, rxRuntimeConfig.rcReadRawFn(&rxRuntimeConfig, 4));
     }
 
+    virtual void sendIncompletePacket()
+    {
+      uint8_t packet[] = {0xA8, 0x01, 20,
+                          0x1c, 0x20, 0x22, 0x60, 0x2e, 0xe0, 0x3b, 0x60, 0x41, 0xa0};
+
+      for (size_t i=0; i < sizeof(packet); i++) {
+          EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+          stub_serialRxCallback(packet[i], NULL);
+      }
+
+      microseconds_stub_value += 5000;
+
+      EXPECT_EQ(RX_FRAME_PENDING, rxRuntimeConfig.rcFrameStatusFn(&rxRuntimeConfig));
+    }
 };
 
 
@@ -235,4 +332,33 @@ TEST_F(SumdRxProtocollUnitTest, Test_MultiplePacketsReceived)
 {
     sendValidPacket();
     sendValidPacket();
+}
+
+TEST_F(SumdRxProtocollUnitTest, Test_Resync)
+{
+    sendIncompletePacket();
+    sendValidPacket();
+}
+
+TEST_F(SumdRxProtocollUnitTest, Test_IgnoreInvalidCRC)
+{
+    sendValidPacket();
+    sendInvalidPacket();
+}
+
+TEST_F(SumdRxProtocollUnitTest, Test_ShortPacketsReceived)
+{
+    sendValidShortPacket();
+    sendValidShortPacket();
+}
+
+TEST_F(SumdRxProtocollUnitTest, TestShortPacketsReceivedWithFailsafe)
+{
+    sendValidFsPacket();
+}
+
+TEST_F(SumdRxProtocollUnitTest, Test_LongPacketsReceived)
+{
+    sendValidLongPacket();
+    sendValidLongPacket();
 }
